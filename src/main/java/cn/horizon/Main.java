@@ -5,6 +5,7 @@ package cn.horizon;
 import cn.horizon.entity.ResponseData;
 import cn.horizon.entity.Stock;
 import cn.horizon.entity.StockInfo;
+import cn.horizon.util.ProgressBar;
 import cn.hutool.core.collection.CollectionUtil;
 import cn.hutool.http.Header;
 import cn.hutool.http.HttpRequest;
@@ -14,6 +15,8 @@ import cn.hutool.poi.excel.ExcelWriter;
 import com.alibaba.fastjson.JSON;
 
 import javax.swing.*;
+import javax.swing.filechooser.FileSystemView;
+import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.net.HttpCookie;
@@ -30,24 +33,21 @@ public class Main {
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy/MM/d");
         ArrayList<Map<Object, Object>> stocks = new ArrayList<>();
         ArrayList<Map<Object, Object>> stocks2 = new ArrayList<>();
-//        try {
-//            InputStreamReader inputStreamReader = new InputStreamReader(new FileInputStream("company.txt"));
-//
-//        } catch (FileNotFoundException e) {
-//            System.out.println(e.getMessage());
-//        }
-
-        Scanner scanner = new Scanner(System.in);
-//        Scanner scanner = new Scanner(Files.newInputStream(Paths.get("src/main/resources/test.txt")));
+//        System.out.println("请输入要查询的所有公司，输入'0'结束");
+//        Scanner scanner = new Scanner(System.in);
+        List<String> companyList = new ArrayList<>();
+        Scanner scanner = new Scanner(Files.newInputStream(Paths.get("src/main/resources/company.txt")));
         while (!scanner.hasNext("0")) {
-            String next = scanner.next();
-            System.out.println("公司代码：" + next);
-            List<Stock> stockList = getStocks(next);
-
+            companyList.add(scanner.next());
+        }
+        ProgressBar progressBar = new ProgressBar(100, ProgressBar.ColorEnum.GREEN);
+        for (int i = 0; i < companyList.size(); i++) {
+            String company = companyList.get(i);
+//            System.out.print("获取" + company + "的数据中......");
+            List<Stock> stockList = getStocks(company);
             Map<Object, Object> excelData = new TreeMap<>();
             Map<Object, Object> excelData2 = new TreeMap<>();
             if (!CollectionUtil.isEmpty(stockList)) {
-                System.out.println(stockList);
                 excelData.put("公司代码", stockList.get(0).getSymbol());
                 stockList.forEach(stock -> excelData.put(sdf.format(stock.getTimestamp()), stock.getClose()));
                 stocks.add(excelData);
@@ -56,14 +56,28 @@ public class Main {
                 stockList.forEach(stock -> excelData2.put(sdf.format(stock.getTimestamp()), stock.getPe()));
                 stocks2.add(excelData2);
             } else {
-                System.out.println("无法获取" + next + "的股票信息");
+                System.out.println("无法获取" + company + "的股票信息");
             }
+            double percent = 1.0 * (i + 1) / companyList.size();
+            int current = (int) (percent * 100);
+            String currentLog = "获取" + company + "的数据中......";
+            progressBar.printProgress(current, currentLog);
         }
+        System.out.println("\n\33[0m数据获取完成，选择目录保存数据");
         if (CollectionUtil.isEmpty(stocks) || CollectionUtil.isEmpty(stocks2)) {
             System.out.println("无数据导出");
         } else {
             String outputPath = getOutPutPath();
-            System.out.println("文件保存在" + outputPath + "环保行业资本市场分析.xlsx");
+            if (outputPath == null) {
+                FileSystemView fsv = FileSystemView.getFileSystemView();
+                File com=fsv.getHomeDirectory();
+                //桌面路径
+                outputPath = com.getPath();
+                System.out.println("未选择目录,文件默认保存在 " + outputPath + "/环保行业资本市场分析.xlsx");
+            } else {
+                System.out.println("文件保存在 " + outputPath + "/环保行业资本市场分析.xlsx");
+            }
+
             ExcelWriter excelWriter = ExcelUtil.getWriter(outputPath + "/环保行业资本市场分析.xlsx", "股价数据");
             excelWriter.write(stocks);
             excelWriter.autoSizeColumnAll();
@@ -89,13 +103,10 @@ public class Main {
         paramMap.put("count", "-5");
         paramMap.put("indicator", "kline,pe,pb,ps,pcf,market_capital,agt,ggt,balance");
 
-//        String s = HttpUtil.get("https://stock.xueqiu.com/v5/stock/chart/kline.json", paramMap);
-        String s = HttpRequest.get("https://stock.xueqiu.com/v5/stock/chart/kline.json")
+        String body = HttpRequest.get("https://stock.xueqiu.com/v5/stock/chart/kline.json")
                 .header(Header.COOKIE, httpCookies)
-                .form(paramMap)
-                .execute().body();
-        ResponseData responseData = JSON.parseObject(s, ResponseData.class);
-        System.out.println(responseData);
+                .form(paramMap).execute().body();
+        ResponseData responseData = JSON.parseObject(body, ResponseData.class);
         if (responseData.getData() == null) {
             StockInfo emptyStock = new StockInfo();
             emptyStock.setSymbol(companyCode);
@@ -142,6 +153,10 @@ public class Main {
         JFileChooser jFileChooser = new JFileChooser();
         jFileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
         jFileChooser.showOpenDialog(jFileChooser);
-        return jFileChooser.getSelectedFile().getPath();
+        if (jFileChooser.getSelectedFile() != null) {
+            return jFileChooser.getSelectedFile().getPath();
+        } else {
+            return null;
+        }
     }
 }
