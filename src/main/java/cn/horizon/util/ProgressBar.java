@@ -50,7 +50,9 @@ public class ProgressBar {
 
 
     public void printProgress(int currentVal, String appendLog) {
-        STRING_BUILDER.replace(currentVal, currentVal + 1, String.valueOf(FRONT_GROUND));
+        for (int i = 0; i < currentVal; i++) {
+            STRING_BUILDER.replace(i, i + 1, String.valueOf(FRONT_GROUND));
+        }
         String bar = "\r" + STRING_BUILDER;
         String percent = " " + currentVal + "%";
 
